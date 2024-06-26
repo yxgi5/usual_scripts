@@ -3,7 +3,7 @@
 import os
 import chardet
 import codecs
-
+import argparse
 
 def WriteFile(filePath, u, encoding="utf-8"):
     with codecs.open(filePath, "w", encoding) as f:
@@ -28,14 +28,31 @@ def GBK_2_UTF8(src, dst):
         except Exception:
             print(src +"  "+ coding+ "  read error")
 
+# 检查路径是否指向一个文件
+def is_file(path):
+    return os.path.isfile(path)
+
 # 把目录中的*.c/*.h编码由gbk转换为utf-8
-def ReadDirectoryFile(rootdir):
-    for parent, dirnames, filenames in os.walk(rootdir):
-        for dirname in dirnames:
-          	#递归函数，遍历所有子文件夹
-            #ReadDirectoryFile(dirname)
-            pass
-        for filename in filenames:
+def ReadDirectoryFile(src_file):
+    if src_file=='':
+        print("No path given!!")
+        return
+    if is_file(src_file):
+        print(f"{src_file} 是一个文件。")
+    else:
+        print(f"{src_file} 不是一个文件，可能是目录，不存在，或者是一个链接。")
+        return
+
+    parent = os.path.dirname(os.path.realpath(src_file))
+    filename = os.path.basename(os.path.realpath(src_file))
+    #print(parent)
+    #print(filename)
+    GBK_2_UTF8(os.path.join(parent, filename), os.path.join(parent, filename))
+    pass
+        #for filename in filenames:
+           # GBK_2_UTF8(os.path.join(parent, filename),
+                           #os.path.join(parent, filename))
+'''
             if filename.endswith(".h"):
                 GBK_2_UTF8(os.path.join(parent, filename),
                            os.path.join(parent, filename))
@@ -45,7 +62,12 @@ def ReadDirectoryFile(rootdir):
             if filename.endswith(".tcl"):
                 GBK_2_UTF8(os.path.join(parent, filename),
                            os.path.join(parent, filename))
-
+'''
 if __name__ == "__main__":
-    src_path = "."
-    ReadDirectoryFile(src_path)
+    parser = argparse.ArgumentParser(description="")
+    #src_path = "."
+    parser.add_argument('-f','--file', default='')
+    args = parser.parse_args()
+    print(args) 
+    src_file = args.file
+    ReadDirectoryFile(src_file)
