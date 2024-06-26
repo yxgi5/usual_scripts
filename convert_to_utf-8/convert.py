@@ -6,6 +6,22 @@ import codecs
 import argparse
 import chardet
 
+# 定义颜色
+class Colors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+# 打印彩色文本的函数
+def print_colored(text, color):
+    print(color + text + Colors.ENDC)
+
+
 def WriteFile(filePath, u, encoding="utf-8"):
     with codecs.open(filePath, "w", encoding) as f:
         # 将CRLF替换为LF
@@ -36,9 +52,13 @@ def GBK_2_UTF8(src, dst):
             try:
                 print(src + "  " + coding + " to utf-8  converted!")
             except Exception:
-                print("print error")
+                print_colored(src +" "+ encoding + " convert error", Colors.FAIL)
         except Exception:
-            print(src +" "+ coding+ " read error!")
+            print_colored(src +" "+ coding + " read error!!!", Colors.FAIL)
+
+# 检查路径是否指向一个目录
+def is_directory(path):
+    return os.path.isdir(path)
 
 # 检查路径是否指向一个文件
 def is_file(path):
@@ -50,8 +70,10 @@ def ReadDirectoryFile(rootdir):
         print("No path given!!")
         return
 
-    if is_file(rootdir):
-        print(f"{src_file} 是一个文件。")
+    if is_directory(rootdir):
+        pass
+    else:
+        print(f"{rootdir} 是一个文件。此参数需输入一个目录！")
         return
 
     for parent, dirnames, filenames in os.walk(rootdir):
@@ -80,7 +102,8 @@ def ReadFile(src_file):
         print("No path given!!")
         return
     if is_file(src_file):
-        print(f"{src_file} 是一个文件。")
+        #print(f"{src_file} 是一个文件。")
+        pass
     else:
         print(f"{src_file} 不是一个文件，可能是目录，不存在，或者是一个链接。")
         return
