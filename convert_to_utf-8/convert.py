@@ -50,7 +50,7 @@ def ReadDirectoryFile(rootdir):
         print("No path given!!")
         return
 
-    if is_file(src_file):
+    if is_file(rootdir):
         print(f"{src_file} 是一个文件。")
         return
 
