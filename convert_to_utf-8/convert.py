@@ -7,6 +7,8 @@ import codecs
 
 def WriteFile(filePath, u, encoding="utf-8"):
     with codecs.open(filePath, "w", encoding) as f:
+        # 将CRLF替换为LF
+        u = u.replace('\r\n', '\n')
         f.write(u)
 
 
@@ -15,28 +17,32 @@ def GBK_2_UTF8(src, dst):
     f = open(src, "rb")
     coding = chardet.detect(f.read())["encoding"]
     f.close()
-    if coding != "utf-8":
-        with codecs.open(src, "r", coding) as f:
+    #if coding != "utf-8":
+    with codecs.open(src, "r", coding) as f:
+        try:
+            WriteFile(dst, f.read(), encoding="utf-8")
             try:
-                WriteFile(dst, f.read(), encoding="utf-8")
-                try:
-                    print(src + "  " + coding + " to utf-8  converted!")
-                except Exception:
-                    print("print error")
+                print(src + "  " + coding + " to utf-8  converted!")
             except Exception:
-                print(src +"  "+ coding+ "  read error")
+                print("print error")
+        except Exception:
+            print(src +"  "+ coding+ "  read error")
 
 # 把目录中的*.c/*.h编码由gbk转换为utf-8
 def ReadDirectoryFile(rootdir):
     for parent, dirnames, filenames in os.walk(rootdir):
         for dirname in dirnames:
           	#递归函数，遍历所有子文件夹
-            ReadDirectoryFile(dirname)
+            #ReadDirectoryFile(dirname)
+            pass
         for filename in filenames:
             if filename.endswith(".h"):
                 GBK_2_UTF8(os.path.join(parent, filename),
                            os.path.join(parent, filename))
             if filename.endswith(".c"):
+                GBK_2_UTF8(os.path.join(parent, filename),
+                           os.path.join(parent, filename))
+            if filename.endswith(".tcl"):
                 GBK_2_UTF8(os.path.join(parent, filename),
                            os.path.join(parent, filename))
 
