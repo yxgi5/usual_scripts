@@ -96,11 +96,21 @@ while IFS= read -r -d '' path; do
     # 空名保护
     [ -z "$base" ] && base="_"
 
-    candidate="$base"
+    # 分离文件名和扩展名
+    name="${base%.*}"
+    ext="${base##*.}"
+    if [[ "$name" == "$ext" ]]; then
+        ext=""  # 无扩展名
+    else
+        ext=".$ext"
+    fi
 
-    # 重名处理
+    candidate="$name$ext"
+
+    # 重名处理，_1 插入到扩展名前
     while [ -e "$dir/$candidate" ]; do
-        candidate="${candidate}_1"
+        name="${name}_1"
+        candidate="$name$ext"
     done
 
     # 长度检查
