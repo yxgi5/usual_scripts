@@ -17,7 +17,7 @@
 # 配置
 # -----------------------------
 MAX_NAME_LEN=255
-DRY_RUN=1   # 1 = dry run, 0 = 执行改名
+DRY_RUN=0   # 1 = dry run, 0 = 执行改名
 LOG_FILE="rename_log.txt"
 
 # -----------------------------
@@ -25,7 +25,7 @@ LOG_FILE="rename_log.txt"
 # -----------------------------
 usage() {
     echo "Usage: $0 [-n] <top_directory>"
-    echo "  -n : dry-run mode (默认开启，可查看将要修改的文件名)"
+    echo "  -n : dry-run mode (默认关闭，可查看将要修改的文件名)"
     echo "Example:"
     echo "  $0 -n /mnt/ntfs_disk"
     echo "  $0 /mnt/ntfs_disk        # 执行实际重命名"
