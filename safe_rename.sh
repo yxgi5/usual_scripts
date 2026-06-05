@@ -95,6 +95,11 @@ while IFS= read -r -d '' path; do
 
     # 空名保护
     [ -z "$base" ] && base="_"
+    
+    # 文件名无变化则跳过
+    if [ "$base" = "$original" ]; then
+        continue
+    fi
 
     # 分离文件名和扩展名
     name="${base%.*}"
@@ -106,9 +111,20 @@ while IFS= read -r -d '' path; do
     fi
 
     candidate="$name$ext"
+    
+    # 如果名称根本没变化，则直接跳过
+    if [ "$candidate" = "$original" ]; then
+        continue
+    fi
 
     # 重名处理，_1 插入到扩展名前
     while [ -e "$dir/$candidate" ]; do
+    
+        # 自己本身，不算重名
+        if [ "$dir/$candidate" = "$path" ]; then
+            break
+        fi
+        
         name="${name}_1"
         candidate="$name$ext"
     done
