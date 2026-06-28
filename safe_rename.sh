@@ -114,6 +114,10 @@ while IFS= read -r -d '' path; do
     base="${base//</_}"
     base="${base//>/_}"
     base="${base//|/_}"
+#    base="${base//\;/_}"
+#    base="${base//\/_}"
+    base="${base//\;/}"
+    base="${base//\/}"
 
     # 去掉 Windows 不允许结尾的空格或 .
     while [[ "$base" == *" " ]]; do
