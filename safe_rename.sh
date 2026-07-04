@@ -4,14 +4,15 @@
 # NTFS 安全重命名脚本
 # =============================
 # 功能：
-# 1. 递归去掉文件/目录名前导空格
+# 1. 递归去掉文件/目录名前导/尾部空格
 # 2. 替换 NTFS 禁止字符 : * ? " < > | 为 _
 # 3. 删除控制字符 ASCII 0~31
-# 4. 去掉末尾空格和 .
-# 5. 重名自动添加 _1
-# 6. 超长文件名跳过
-# 7. 支持 dry-run
-# 8. 记录修改日志 rename_log.txt
+# 4. 专门处理扩展名：去除扩展名内部及周边的空格
+# 5. 去掉末尾空格和 .
+# 6. 重名自动添加 _1
+# 7. 超长文件名跳过
+# 8. 支持 dry-run
+# 9. 记录修改日志 rename_log.txt
 
 # -----------------------------
 # 配置
@@ -73,7 +74,12 @@ TOP_DIR="$1"
 #fi
 
 [ -z "$TOP_DIR" ] && usage
-[ ! -d "$TOP_DIR" ] && echo "Error: $TOP_DIR is not a directory" && exit 1
+# 确保传入的是绝对路径或相对路径的有效目录，方便后续处理
+# [ ! -d "$TOP_DIR" ] && echo "Error: $TOP_DIR is not a directory" && exit 1
+if [ ! -d "$TOP_DIR" ]; then
+    echo "Error: $TOP_DIR is not a directory"
+    exit 1
+fi
 
 # -----------------------------
 # 初始化日志
@@ -99,9 +105,20 @@ while IFS= read -r -d '' path; do
     dir=$(dirname -- "$path")
     base=$(basename -- "$path")
     original="$base"
+    echo ${base}
 
     # 去除前导空格
     base="${base#"${base%%[! ]*}"}"
+    
+    # 去后缀名前导空格
+    base="${base%"${base##*[! ]}"}"
+    
+    # 去除前导空白 包括制表符 Tab
+    base="${base#"${base%%[![:space:]]*}"}"
+
+    # 去除尾部空白 包括制表符 Tab
+    base="${base%"${base##*[![:space:]]}"}"
+
 
     # 删除控制字符 ASCII 0~31
     base=$(printf '%s' "$base" | tr -d '\000-\037')
