@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 # =============================
@@ -13,7 +12,7 @@
 # 6. 重名自动添加 _1
 # 7. 超长文件名跳过
 # 8. 支持 dry-run
-# 9. 记录修改日志
+# 9. 仅在实际执行时记录修改日志
 
 # -----------------------------
 # 配置
@@ -21,8 +20,8 @@
 MAX_NAME_LEN=255
 DRY_RUN=1   # 1 = dry run, 0 = 执行改名
 RECURSIVE=0 # 0 = 非递归(默认), 1 = 递归
-LOG_FILE="rename_log_$(date +%Y%m%d_%H%M%S).txt"
 RENAME_COUNT=0
+USER_LOG_FILE=""  # 用户指定的日志文件名
 
 # -----------------------------
 # 使用提示
@@ -30,15 +29,15 @@ RENAME_COUNT=0
 usage() {
     echo "Usage: $0 [-n] [-r] [-R] [-l logfile] <top_directory>"
     echo
-    echo "  -n           dry-run mode (default)"
-    echo "  -r, --run    really rename files"
+    echo "  -n           dry-run mode (default, no log file generated)"
+    echo "  -r, --run    really rename files (generates log file)"
     echo "  -R           enable recursive processing of subdirectories (default is off)"
-    echo "  -l logfile   specify log file"
+    echo "  -l logfile   specify log file (only effective with -r)"
     echo
     echo "Examples:"
-    echo "  $0 /mnt/ntfs_disk          (Non-recursive, dry-run)"
-    echo "  $0 -R /mnt/ntfs_disk       (Recursive, dry-run)"
-    echo "  $0 -r -R /mnt/ntfs_disk    (Recursive, execute)"
+    echo "  $0 /mnt/ntfs_disk          (Non-recursive, dry-run, no log)"
+    echo "  $0 -R /mnt/ntfs_disk       (Recursive, dry-run, no log)"
+    echo "  $0 -r -R /mnt/ntfs_disk    (Recursive, execute, logs to default file)"
     echo "  $0 -r -l mylog.txt /mnt/ntfs_disk"
     exit 1
 }
@@ -63,7 +62,7 @@ while getopts ":nrl:R" opt; do
             RECURSIVE=1
             ;;
         l)
-            LOG_FILE="$OPTARG"
+            USER_LOG_FILE="$OPTARG"
             ;;
         \?)
             usage
@@ -87,13 +86,30 @@ TOP_DIR="${TOP_DIR%/}"
 # -----------------------------
 # 初始化日志
 # -----------------------------
-{
-    echo "Rename Log - $(date)"
-    echo "Top directory: $TOP_DIR"
-    echo "Dry run: $DRY_RUN"
-    echo "Recursive: $RECURSIVE"
-    echo "-----------------------------------"
-} >> "$LOG_FILE"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+if [ "$DRY_RUN" -eq 0 ]; then
+    # 实际运行模式：确定日志文件名
+    if [ -n "$USER_LOG_FILE" ]; then
+        LOG_FILE="$USER_LOG_FILE"
+    else
+        LOG_FILE="rename_log_${TIMESTAMP}.txt"
+    fi
+    
+    # 创建/清空日志文件并写入头部信息
+    {
+        echo "Rename Log - $(date)"
+        echo "Top directory: $TOP_DIR"
+        echo "Mode: Real Execution"
+        echo "Recursive: $RECURSIVE"
+        echo "-----------------------------------"
+    } > "$LOG_FILE"
+    echo "Log file initialized: $LOG_FILE"
+else
+    # Dry Run 模式：将日志文件指向 /dev/null（黑洞设备）
+    LOG_FILE="/dev/null"
+    echo "Mode: Dry Run (No log file will be generated)"
+fi
 
 # -----------------------------
 # 核心清理函数
@@ -269,7 +285,11 @@ rename_item() {
         
         # 防止无限循环，虽然极少发生
         if [ $counter -gt 1000 ]; then
-            echo "ERROR: Too many conflicts for $path" | tee -a "$LOG_FILE"
+            if [ "$DRY_RUN" -eq 0 ]; then
+                echo "ERROR: Too many conflicts for $path" | tee -a "$LOG_FILE"
+            else
+                echo "ERROR: Too many conflicts for $path"
+            fi
             return 1
         fi
     done
@@ -280,14 +300,18 @@ rename_item() {
     # 长度检查
     local len=${#new_base}
     if [ "$len" -gt "$MAX_NAME_LEN" ]; then
-        echo "SKIP (too long) $path -> $new_path" | tee -a "$LOG_FILE"
+        if [ "$DRY_RUN" -eq 0 ]; then
+            echo "SKIP (too long) $path -> $new_path" | tee -a "$LOG_FILE"
+        else
+            echo "SKIP (too long) $path -> $new_path"
+        fi
         return 1
     fi
 
     # 执行重命名
     if [ "$DRY_RUN" = "1" ]; then
-        echo "DRY RUN: $path -> $new_path" | tee -a "$LOG_FILE"
-	# Dry Run 模式下也计数，方便用户知道有多少文件会被影响
+        echo "DRY RUN: $path -> $new_path"
+        # Dry Run 模式下也计数，方便用户知道有多少文件会被影响
         ((RENAME_COUNT++)) 
     else
         if mv -- "$path" "$new_path"; then
@@ -321,7 +345,11 @@ process_directory() {
             if [ "$RECURSIVE" -eq 1 ]; then
                 process_directory "$item"
             else
-                echo "SKIP DIR (non-recursive): $item" | tee -a "$LOG_FILE"
+                if [ "$DRY_RUN" -eq 0 ]; then
+                    echo "SKIP DIR (non-recursive): $item" | tee -a "$LOG_FILE"
+                else
+                    echo "SKIP DIR (non-recursive): $item"
+                fi
             fi
         elif [ -f "$item" ]; then
             # 如果是文件，直接重命名
@@ -361,4 +389,9 @@ process_directory "$TOP_DIR"
 
 echo
 echo "Rename count: $RENAME_COUNT"
-echo "Done. Log saved to $LOG_FILE"
+
+if [ "$DRY_RUN" -eq 0 ]; then
+    echo "Done. Log saved to $LOG_FILE"
+else
+    echo "Done. (Dry Run mode, no log file generated)"
+fi
