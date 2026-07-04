@@ -101,89 +101,123 @@ TOP_DIR="${TOP_DIR%/}"
 clean_name() {
     local input="$1"
     local base="$input"
-    
-    # 1. 分离扩展名和主体
-    # 注意：如果文件名以 . 开头且没有其他 . (如 .gitignore)，basename 会认为没有扩展名
-    # 如果文件名有多个 . (如 file.tar.gz)，我们通常只处理最后一个 . 之后的部分作为扩展名
-    
     local name_part=""
     local ext_part=""
-    
-    # 检查是否有扩展名 (包含点号)
+    local candidate=""
+
+    # 1. 分离扩展名和主体
     if [[ "$base" == *.* ]]; then
-        # 提取最后一个点之后的内容作为扩展名
         ext_part="${base##*.}"
-        # 提取最后一个点之前的内容作为主体
         name_part="${base%.*}"
-        
-        # 特殊情况：如果主体为空（例如文件名为 ".txt"），name_part 为空，ext_part 为 "txt"
-        # 此时 name_part 应该视为空，或者根据需求保留点。这里假设 .txt 的主体是空字符串。
     else
         name_part="$base"
         ext_part=""
     fi
 
-    # 2. 清理主体部分 (name_part)
-    # 去除前导空白 (包括空格和Tab)
-    name_part="${name_part#"${name_part%%[![:space:]]*}"}"
-    # 去除尾部空白
-    name_part="${name_part%"${name_part##*[![:space:]]}"}"
-    # 删除控制字符 ASCII 0~31
-    name_part=$(printf '%s' "$name_part" | tr -d '\000-\037')
-    # 替换 NTFS 禁止字符
-    name_part="${name_part//:/_}"
-    name_part="${name_part//\*/_}"
-    name_part="${name_part//\?/_}"
-    name_part="${name_part//\"/_}"
-    name_part="${name_part//</_}"
-    name_part="${name_part//>/_}"
-    name_part="${name_part//|/_}"
-    name_part="${name_part//\;/}" # 删除分号
-    name_part="${name_part//$'\x7f'/}" # 删除 DEL 字符
+    # 局部辅助函数：执行通用的字符清理
+    _sanitize() {
+        local str="$1"
+        # 去除首尾空白 (空格, Tab等)
+        str="${str#"${str%%[![:space:]]*}"}"
+        str="${str%"${str##*[![:space:]]}"}"
+        
+        # 删除控制字符 ASCII 0-31 和 DEL (127/八进制177)
+        # 注意：\177 即 \x7f，所以无需后续单独删除 \x7f
+        str=$(printf '%s' "$str" | tr -d '\000-\037\177')
+        
+        # 替换 NTFS/Windows 非法字符为下划线
+        str="${str//:/_}"
+        str="${str//;/_}"
+        str="${str//\*/_}"
+        str="${str//\?/_}"
+        str="${str//\"/_}"
+        str="${str//</_}"
+        str="${str//>/_}"
+        str="${str//|/_}"
+        
+        # 删除分号 (ASCII 59，不在 tr 范围内，需单独处理)
+        # str="${str//\;/}"
+	
+	# 强制转小写
+        # str=$(printf '%s' "$str" | tr '[:upper:]' '[:lower:]')
+        
+        echo "$str"
+    }
 
-    # 3. 清理扩展名部分 (ext_part)
+    # 2. 对主体和扩展名分别进行清理
+    name_part=$(_sanitize "$name_part")
     if [ -n "$ext_part" ]; then
-        # 去除扩展名的前导空格
-        ext_part="${ext_part#"${ext_part%%[![:space:]]*}"}"
-        # 去除扩展名的尾部空格
-        ext_part="${ext_part%"${ext_part##*[![:space:]]}"}"
-        # 扩展名中通常不允许有空格或特殊字符，这里也做同样的非法字符清理
-        ext_part=$(printf '%s' "$ext_part" | tr -d '\000-\037')
-        ext_part="${ext_part//:/_}"
-        ext_part="${ext_part//\*/_}"
-        ext_part="${ext_part//\?/_}"
-        ext_part="${ext_part//\"/_}"
-        ext_part="${ext_part//</_}"
-        ext_part="${ext_part//>/_}"
-        ext_part="${ext_part//|/_}"
-        ext_part="${ext_part//\;/}"
-        ext_part="${ext_part//$'\x7f'/}"
+        ext_part=$(_sanitize "$ext_part")
     fi
 
-    # 4. 重新组合
-    local candidate=""
+    # 3. Windows 保留字检查 (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
+    # 不区分大小写，如果匹配则在前面加下划线
+    local upper_name=$(printf '%s' "$name_part" | tr '[:lower:]' '[:upper:]')
+    case "$upper_name" in
+        CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])
+            name_part="_${name_part}"
+            ;;
+    esac
+
+    # 4. 初步重组
     if [ -n "$ext_part" ]; then
         candidate="${name_part}.${ext_part}"
     else
         candidate="$name_part"
     fi
 
-    # 5. 最终收尾清理 (针对 Windows 不允许结尾的空格或 .)
-    # 虽然上面已经去除了尾部空格，但以防万一组合后出现异常，或者主体部分清理后剩下了点
+    # 5. 长度检查与截断处理 (限制 255 字节)
+    local max_len=255
+    local current_len=${#candidate}
+    
+    if [ "$current_len" -gt "$max_len" ]; then
+        local hash_len=8
+        # 生成基于原始输入名的短 Hash (MD5前8位)，用于防止截断后重名
+        local hash=$(printf '%s' "$input" | md5sum | cut -c1-8)
+        
+        if [ -n "$ext_part" ]; then
+            local ext_len=${#ext_part}
+            # 计算主体允许的最大长度：总长 - 扩展名 - 点 - 下划线 - Hash
+            local max_name_len=$((max_len - ext_len - 1 - 1 - hash_len))
+            
+            if [ "$max_name_len" -lt 1 ]; then
+                max_name_len=1
+            fi
+            
+            # 截断主体
+            name_part="${name_part:0:$max_name_len}"
+            candidate="${name_part}_${hash}.${ext_part}"
+        else
+            # 无扩展名的情况
+            local max_name_len=$((max_len - 1 - hash_len))
+            name_part="${name_part:0:$max_name_len}"
+            candidate="${name_part}_${hash}"
+        fi
+    fi
+
+    # 6. 合并连续的下划线 (例如 file___name -> file_name)
+    while [[ "$candidate" == *"__"* ]]; do
+        candidate="${candidate//__/_}"
+    done
+
+    # 7. 最终兜底清理
+    # 去除末尾空格
     while [[ "$candidate" == *" " ]]; do
         candidate="${candidate% }"
     done
+    # 去除末尾的点 (Windows 不允许)
     while [[ "$candidate" == *. ]]; do
         candidate="${candidate%.}"
     done
     
-    # 空名保护
+    # 如果处理后名为空，赋予默认名
     if [ -z "$candidate" ]; then
         candidate="_"
     fi
 
     echo "$candidate"
 }
+
 
 # -----------------------------
 # 重命名单个条目 (文件或目录)
@@ -292,7 +326,7 @@ process_directory() {
         elif [ -f "$item" ]; then
             # 如果是文件，直接重命名
             #rename_item "$item" > /dev/null
-	    rename_item "$item"
+            rename_item "$item"
         fi
     done < <(find "$current_dir" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
 
